@@ -68,6 +68,22 @@ if [[ ("$GITHUB_EVENT_NAME" == "push" && "$GITHUB_REF" == "refs/heads/main") ||
     mkdir -p ~/.ssh/ && echo "$SERVER $SERVER_PUBLIC_KEY" > ~/.ssh/known_hosts
     rsync --verbose --archive --chmod=D755,F644 --compress --delete \
           ./whatwg.org ./*.whatwg.org "deploy@$SERVER:/var/www/"
+    echo ""
+
+    # Also upload to the Cloudflare R2 bucket, if the R2 credentials are set.
+    # See https://github.com/whatwg/misc-server/issues/107.
+    if [[ "${AWS_ACCESS_KEY_ID:-}" != "" ]]; then
+        header "Uploading to R2"
+        for SITE in whatwg.org *.whatwg.org; do
+            # Like the rsync above, with --delete. The excludes are a safeguard:
+            # commit snapshots and review drafts are write-once in R2, so
+            # deleting any would fail.
+            aws s3 sync --delete "$SITE/" "s3://whatwg-sites/$SITE/" \
+                --exclude "commit-snapshots/*" --exclude "review-drafts/*"
+        done
+    else
+        header "Skipping R2 upload (no credentials)"
+    fi
 else
     header "Skipping deploy"
 fi

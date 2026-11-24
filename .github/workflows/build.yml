@@ -14,6 +14,9 @@ jobs:
   build:
     name: Build
     runs-on: ubuntu-22.04
+    # The R2 credentials are secrets of the production environment, which only
+    # the main branch can use. PR builds run without an environment.
+    environment: ${{ ((github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'repository_dispatch') && 'production' || '' }}
     steps:
     - uses: actions/checkout@v4
     - uses: actions/setup-python@v5
@@ -31,3 +34,7 @@ jobs:
         SERVER: ${{ secrets.MARQUEE_SERVER }}
         SERVER_PUBLIC_KEY: ${{ secrets.MARQUEE_PUBLIC_KEY }}
         SERVER_DEPLOY_KEY: ${{ secrets.MARQUEE_DEPLOY_KEY }}
+        AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+        AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+        AWS_ENDPOINT_URL: ${{ secrets.R2_ENDPOINT }}
+        AWS_DEFAULT_REGION: auto

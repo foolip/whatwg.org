@@ -25,6 +25,7 @@ SERVER_PUBLIC_KEY=${SERVER_PUBLIC_KEY:-}
 SERVER_DEPLOY_KEY=${SERVER_DEPLOY_KEY:-}
 EXTRA_FILES=${EXTRA_FILES:-}
 POST_BUILD_STEP=${POST_BUILD_STEP:-}
+AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-}
 
 if [[ "$GITHUB_ACTIONS" != "true" ]]; then
     echo "Running a local deploy into $WEB_ROOT directory"
@@ -175,6 +176,30 @@ if [[ "$GITHUB_REPOSITORY" == whatwg/* && "$GITHUB_EVENT_NAME" == "push" && "$GI
     # --chmod=D755,F644 means read-write for user, read-only for others.
     rsync --verbose --archive --chmod=D755,F644 --compress \
           "$WEB_ROOT" "deploy@$SERVER:/var/www/"
+    echo ""
+
+    # Also upload to the Cloudflare R2 bucket, if the R2 credentials are set.
+    # See https://github.com/whatwg/misc-server/issues/107.
+    if [[ "$AWS_ACCESS_KEY_ID" != "" ]]; then
+        header "Uploading to R2..."
+        R2_BUCKET="s3://whatwg-sites"
+        # Like the rsync above, nothing is deleted.
+        aws s3 sync "$WEB_ROOT/" "$R2_BUCKET/$WEB_ROOT/" \
+            --exclude "$COMMITS_DIR/*" --exclude "$REVIEW_DRAFTS_DIR/*"
+        # Commit snapshots and review drafts are write-once in R2 (bucket lock),
+        # so upload each directory only if it isn't there yet, e.g. when a deploy
+        # is re-run.
+        for DIR in "$WEB_ROOT/$COMMITS_DIR"/*/ "$WEB_ROOT/$REVIEW_DRAFTS_DIR"/*/; do
+            [[ -d "$DIR" ]] || continue
+            if [[ -n "$(aws s3 ls "$R2_BUCKET/$DIR" || true)" ]]; then
+                echo "$DIR is already in R2, skipping"
+            else
+                aws s3 sync "$DIR" "$R2_BUCKET/$DIR"
+            fi
+        done
+    else
+        header "Skipping R2 upload (no credentials)"
+    fi
 else
     header "Skipping deploy"
 fi
