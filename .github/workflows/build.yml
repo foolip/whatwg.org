@@ -16,7 +16,7 @@ jobs:
     runs-on: ubuntu-22.04
     # The R2 credentials are secrets of the production environment, which only
     # the main branch can use. PR builds run without an environment.
-    environment: ${{ ((github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'repository_dispatch') && 'production' || '' }}
+    environment: ${{ github.ref == 'refs/heads/main' && 'production' || '' }}
     steps:
     - uses: actions/checkout@v4
     - uses: actions/setup-python@v5
